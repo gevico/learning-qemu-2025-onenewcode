@@ -22,10 +22,9 @@
 #include "qemu/cutils.h"
 #include "qemu/error-report.h"
 #include "qapi/error.h"
-#include "system/system.h"
-#include "system/memory.h"
-#include "target/riscv/cpu.h"
-#include "chardev/char.h"
+#include "sysemu/sysemu.h"
+#include "sysemu/reset.h"
+#include "hw/boards.h"
 #include "hw/loader.h"
 #include "hw/sysbus.h"
 #include "hw/riscv/g233.h"
@@ -34,8 +33,7 @@
 #include "hw/intc/sifive_plic.h"
 #include "hw/misc/unimp.h"
 #include "hw/char/pl011.h"
-
-/* TODO: you need include some header files */
+#include "target/riscv/cpu.h"
 
 static const MemMapEntry g233_memmap[] = {
     [G233_DEV_MROM] =     {     0x1000,     0x2000 },
@@ -53,6 +51,10 @@ static void g233_soc_init(Object *obj)
      * You can add more devices here(e.g. cpu, gpio)
      * Attention: The cpu resetvec is 0x1004
      */
+    G233SoCState *s = RISCV_G233_SOC(obj);
+    
+    object_initialize_child(obj, "cpus", &s->cpus, TYPE_RISCV_HART_ARRAY);
+    object_initialize_child(obj, "gpio", &s->gpio, TYPE_SIFIVE_GPIO);
 }
 
 static void g233_soc_realize(DeviceState *dev, Error **errp)
@@ -61,8 +63,27 @@ static void g233_soc_realize(DeviceState *dev, Error **errp)
     G233SoCState *s = RISCV_G233_SOC(dev);
     MemoryRegion *sys_mem = get_system_memory();
     const MemMapEntry *memmap = g233_memmap;
+    int i;
+    Error *err = NULL;
 
     /* CPUs realize */
+    object_property_set_str(OBJECT(&s->cpus), "cpu-type", ms->cpu_type, &err);
+    if (err) {
+        error_propagate(errp, err);
+        return;
+    }
+
+    object_property_set_int(OBJECT(&s->cpus), "num-harts", ms->smp.cpus, &err);
+    if (err) {
+        error_propagate(errp, err);
+        return;
+    }
+
+    sysbus_realize(SYS_BUS_DEVICE(&s->cpus), &err);
+    if (err) {
+        error_propagate(errp, err);
+        return;
+    }
 
     /* Mask ROM */
     memory_region_init_rom(&s->mask_rom, OBJECT(dev), "riscv.g233.mrom",
@@ -160,9 +181,14 @@ static void g233_machine_init(MachineState *machine)
     }
 
     /* Initialize SoC */
-
+    object_property_set_str(OBJECT(&s->soc), "cpu-type", machine->cpu_type,
+                            &error_abort);
+    sysbus_realize(SYS_BUS_DEVICE(&s->soc), &error_abort);
 
     /* Data Memory(DDR RAM) */
+    memory_region_add_subregion(get_system_memory(),
+                                memmap[G233_DEV_DRAM].base,
+                                machine->ram);
 
     /* Mask ROM reset vector */
     uint32_t reset_vec[5];

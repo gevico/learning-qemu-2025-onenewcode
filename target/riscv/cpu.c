@@ -3081,14 +3081,18 @@ static const TypeInfo riscv_cpu_type_infos[] = {
         .cfg.ext_xtheadmemidx = true,
         .cfg.ext_xtheadmempair = true,
         .cfg.ext_xtheadsync = true,
-        .cfg.pmp = true,
+    ),
 
-        .cfg.mvendorid = THEAD_VENDOR_ID,
-
+    DEFINE_RISCV_CPU(TYPE_RISCV_CPU_GEVICO_G233, TYPE_RISCV_VENDOR_CPU,
+        .misa_mxl_max = MXL_RV64,
+        .misa_ext = RVI | RVM | RVA | RVF | RVD | RVC | RVS | RVU,
+        .priv_spec = PRIV_VERSION_1_12_0,
         .cfg.max_satp_mode = VM_1_10_SV39,
-#ifndef CONFIG_USER_ONLY
-        .custom_csrs = th_csr_list,
-#endif
+        .cfg.ext_zifencei = true,
+        .cfg.ext_zicsr = true,
+        .cfg.mmu = true,
+        .cfg.pmp = true,
+        .cfg.pmp_regions = 8
     ),
 
     DEFINE_RISCV_CPU(TYPE_RISCV_CPU_TT_ASCALON, TYPE_RISCV_VENDOR_CPU,
