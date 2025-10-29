@@ -717,4 +717,95 @@ target_ulong helper_hyp_hlvx_wu(CPURISCVState *env, target_ulong addr)
     return cpu_ldl_code_mmu(env, addr, oi, ra);
 }
 
+void helper_dma(CPURISCVState *env, uintptr_t dst,
+                uintptr_t src, target_ulong grain)
+{
+    int n;
+    int i, j;
+    float val;
+    uintptr_t src_p, dst_p;
+
+    if (grain > 2) {
+        riscv_raise_exception(env, RISCV_EXCP_ILLEGAL_INST, GETPC());
+    }
+
+    n = 1 << (grain + 3);
+    for (i = 0; i < n; ++i) {
+        for (j = 0; j < n; ++j) {
+            src_p = src + (i * n + j) * sizeof(float);
+            dst_p = dst + (j * n + i) * sizeof(float);
+            val =  make_float32(cpu_ldl_data(env, src_p));
+            cpu_stl_data(env, dst_p, float32_val(val));
+        }
+    }
+}
+void helper_sort(CPURISCVState *env, uintptr_t start,
+                 target_ulong n, target_ulong cnt)
+{
+    int i, j;
+    int x, y;
+    uintptr_t xp, yp;
+
+    if (n < cnt) {
+        riscv_raise_exception(env, RISCV_EXCP_ILLEGAL_INST, GETPC());
+    }
+
+    for (i = cnt - 1; i > 0; --i) {
+        for (j = 0; j < i; ++j) {
+            xp = start + j * sizeof(int);
+            yp = start + (j + 1) * sizeof(int);
+            x = cpu_ldl_data(env, xp);
+            y = cpu_ldl_data(env, yp);
+            if (x > y) {
+                cpu_stl_data(env, xp, y);
+                cpu_stl_data(env, yp, x);
+            }
+        }
+    }
+}
+void helper_crush(CPURISCVState *env, uintptr_t dst,
+                  uintptr_t src, target_ulong n)
+{
+    int i, j;
+    uintptr_t src_p1, src_p2, dst_p;
+    u_int8_t lo, hi, val;
+
+    i = j = 0;
+    while (i + 1 < n) {
+        src_p1 = src + i;
+        src_p2 = src + i + 1;
+        dst_p = dst + j;
+        lo = cpu_ldub_data(env, src_p1) & 0x0F;
+        hi = cpu_ldub_data(env, src_p2) & 0x0F;
+        val = lo | (hi << 4);
+        cpu_stb_data(env, dst_p, val);
+        i += 2;
+        ++j;
+    }
+
+    if (i < n) {
+        src_p1 = src + i;
+        dst_p = dst + j;
+        val = cpu_ldub_data(env, src_p1) & 0x0F;
+        cpu_stb_data(env, dst_p, val);
+        ++j;
+    }
+}
+void helper_expand(CPURISCVState *env, uintptr_t dst,
+                   uintptr_t src, target_ulong n)
+{
+    int i, j;
+    uintptr_t src_p, dst_p;
+    u_int8_t val;
+
+    j = 0;
+    for (i = 0; i < n; ++i) {
+        src_p = src + i;
+        dst_p = dst + j++;
+        val = cpu_ldub_data(env, src_p);
+        cpu_stb_data(env, dst_p, val & 0x0F);
+        dst_p = dst + j++;
+        cpu_stb_data(env, dst_p, (val >> 4) & 0x0F);
+    }
+}
 #endif /* !CONFIG_USER_ONLY */
